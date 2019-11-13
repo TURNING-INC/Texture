@@ -646,14 +646,14 @@ static NSArray *DefaultLinkAttributeNames() {
   NSRange visibleRange = layout.visibleRange;
   NSRange clampedRange = NSIntersectionRange(visibleRange, NSMakeRange(0, _attributedText.length));
   
-  // Search the 9 points of a 44x44 square around the touch until we find a link.
+  // Search the 9 points of a 4x4 square around the touch until we find a link.
   // Start from center, then do sides, then do top/bottom, then do corners.
   static constexpr CGSize kRectOffsets[9] = {
     { 0, 0 },
-    { -22, 0 }, { 22, 0 },
-    { 0, -22 }, { 0, 22 },
-    { -22, -22 }, { -22, 22 },
-    { 22, -22 }, { 22, 22 }
+    { -2, 0 }, { 2, 0 },
+    { 0, -2 }, { 0, 2 },
+    { -2, -22 }, { -2, 2 },
+    { 2, -22 }, { 2, 2 }
   };
 
   for (const CGSize &offset : kRectOffsets) {
