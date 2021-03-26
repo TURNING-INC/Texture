@@ -96,7 +96,7 @@ static std::atomic_bool _useMainThreadDelegateCallbacks(true);
   _networkImageNodeFlags.downloaderImplementsSetPriority = [downloader respondsToSelector:@selector(setPriority:withDownloadIdentifier:)];
   _networkImageNodeFlags.downloaderImplementsAnimatedImage = [downloader respondsToSelector:@selector(animatedImageWithData:)];
   _networkImageNodeFlags.downloaderImplementsCancelWithResume = [downloader respondsToSelector:@selector(cancelImageDownloadWithResumePossibilityForIdentifier:)];
-  _networkImageNodeFlags.downloaderImplementsDownloadWithPriority = [downloader respondsToSelector:@selector(downloadImageWithURL:priority:callbackQueue:downloadProgress:completion:)];
+  _networkImageNodeFlags.downloaderImplementsDownloadWithPriority = [downloader respondsToSelector:@selector(downloadImageWithURL:shouldRetry:priority:callbackQueue:downloadProgress:completion:)];
 
   _networkImageNodeFlags.cacheSupportsClearing = [cache respondsToSelector:@selector(clearFetchedImageFromCacheWithURL:)];
   _networkImageNodeFlags.cacheSupportsSynchronousFetch = [cache respondsToSelector:@selector(synchronouslyFetchedCachedImageWithURL:)];
@@ -104,6 +104,7 @@ static std::atomic_bool _useMainThreadDelegateCallbacks(true);
   _networkImageNodeFlags.shouldCacheImage = YES;
   _networkImageNodeFlags.shouldRenderProgressImages = YES;
   self.shouldBypassEnsureDisplay = YES;
+  self.shouldRetryImageDownload = YES;
 
   return self;
 }
@@ -216,6 +217,7 @@ static std::atomic_bool _useMainThreadDelegateCallbacks(true);
     if (reset || hadURL) {
       [self _setCurrentImageQuality:(hadURL ? 0.0 : 1.0)];
       [self _locked__setImage:_defaultImage];
+      [self _locked_setAnimatedImage:nil];
     }
   }
 
@@ -655,8 +657,8 @@ static std::atomic_bool _useMainThreadDelegateCallbacks(true);
       ASImageDownloaderPriority priority = ASImageDownloaderPriorityWithInterfaceState(interfaceState);
 
       downloadIdentifier = [self->_downloader downloadImageWithURL:url
-                           
-                            priority:priority
+                                                       shouldRetry:[self shouldRetryImageDownload]
+                                                          priority:priority
                                                      callbackQueue:callbackQueue
                                                   downloadProgress:downloadProgress
                                                         completion:completion];
@@ -671,6 +673,7 @@ static std::atomic_bool _useMainThreadDelegateCallbacks(true);
         and their requests are put into the same pool.
       */
       downloadIdentifier = [self->_downloader downloadImageWithURL:url
+                                                       shouldRetry:[self shouldRetryImageDownload]
                                                      callbackQueue:callbackQueue
                                                   downloadProgress:downloadProgress
                                                         completion:completion];
@@ -867,7 +870,7 @@ static std::atomic_bool _useMainThreadDelegateCallbacks(true);
 
         as_log_verbose(ASImageLoadingLog(), "Decaching image for %@ url: %@", self, URL);
         
-        ASImageCacherCompletion completion = ^(id <ASImageContainerProtocol> imageContainer) {
+        ASImageCacherCompletion completion = ^(id <ASImageContainerProtocol> imageContainer, ASImageCacheType cacheType) {
           // If the cache sentinel changed, that means this request was cancelled.
           if (ASLockedSelf(self->_cacheSentinel != cacheSentinel)) {
             return;
@@ -887,8 +890,8 @@ static std::atomic_bool _useMainThreadDelegateCallbacks(true);
             if (delegateDidLoadImageFromCache) {
               [delegate imageNodeDidLoadImageFromCache:self];
             }
-            as_log_verbose(ASImageLoadingLog(), "Decached image for %@ img: %@ url: %@", self, [imageContainer asdk_image], URL);
-            finished(imageContainer, nil, nil, ASNetworkImageSourceAsynchronousCache, nil);
+            as_log_verbose(ASImageLoadingLog(), "Decached image for %@ img: %@ url: %@ cacheType: %@", self, [imageContainer asdk_image], URL, cacheType);
+            finished(imageContainer, nil, nil, cacheType == ASImageCacheTypeSynchronous ? ASNetworkImageSourceSynchronousCache : ASNetworkImageSourceAsynchronousCache, nil);
           }
         };
         
